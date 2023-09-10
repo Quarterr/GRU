@@ -3,9 +3,9 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import TensorDataset
 import matplotlib.pyplot as plt
-import scipy.io as sio
 import numpy as np
 from torch.utils.data import TensorDataset
+import scipy.io as sio
 
 
 class Config:
@@ -32,6 +32,18 @@ for i in range(1, 11):
         train_set = data
     else:
         train_set = np.vstack((train_set, data))
+
+#
+# # 对整个数据集进行标准化
+# mean = np.mean(train_set, axis=0)  # 计算每个特征的均值，axis=0 表示沿着列的方向计算
+# std = np.std(train_set, axis=0)    # 计算每个特征的标准差，axis=0 表示沿着列的方向计算
+#
+# # 应用标准化公式到整个数据集
+# normalized_train_set = (train_set - mean) / std
+#
+# print(np.mean(normalized_train_set))
+# print(np.std(normalized_train_set))
+
 
 # 数据标准化 对每个特征分别标准化
 # 获取数据集的形状
@@ -113,11 +125,9 @@ class GRU(nn.Module):
         return self.fc(output[:, -1, :])
         # b, s, h = output.shape
         # fcInput = output.reshape(s * b, h)
-        # print(fcInput.shape)
         # fcOutput = self.fc(fcInput)
         # outcome = fcOutput.reshape(b, s, -1)
         # return outcome[:, -1, :]
-
 
 # # 5.定义GRU网络  两层gru unit分别是200和1（6） 单轴论文
 # class GRU(nn.Module):
@@ -208,7 +218,7 @@ print('Finished Training')
 
 
 # 8. 模型测试
-model.eval()  # 将模型设置为评估模式
+model.eval()
 
 # 存储预测结果和真实值
 predictions = []
