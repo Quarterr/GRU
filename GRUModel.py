@@ -11,9 +11,9 @@ import scipy.io as sio
 class Config:
     time_step = 9  # 时间步长，就是利用多少时间窗口
     batch_size = 300  # 批次大小
-    feature_size = 3  # 每个步长对应的特征数量，3个特征值
-    output_size = 6  # 输出6维向量。3个位置和对应的导数
-    epochs = 50  # 迭代轮数
+    feature_size = 4  # 每个步长对应的特征数量，3个特征值
+    output_size = 1  # 输出6维向量。3个位置和对应的导数
+    epochs = 40  # 迭代轮数
     best_loss = 0  # 记录损失
     learning_rate = 0.0003  # 初始化学习率
     model_name = 'gru'  # 模型名称
@@ -23,12 +23,13 @@ class Config:
 config = Config()
 
 # 1,处理训练数据 标准化
-datafile = sio.loadmat('C:/Users/HP/Desktop/CEG5003/dataset/Dataset_nurbs_1/training_set_transformer.mat')
+# datafile = sio.loadmat('C:/Users/HP/Desktop/CEG5003/dataset/Dataset_nurbs_1/training_set_transformer.mat')
+datafile = sio.loadmat('new_data.mat')
 
-train_set = np.array([])
+train_set = None
 for i in range(1, 11):
     data = datafile.get(f'series_training{i}')
-    if train_set.size == 0:
+    if train_set is None:
         train_set = data
     else:
         train_set = np.vstack((train_set, data))
@@ -70,15 +71,15 @@ for start_idx in range(0, len(normalized_train_set), group_size):
     group_data = normalized_train_set[start_idx:end_idx]
 
     for index in range(len(group_data) - config.time_step):
-        train_dataX.append(group_data[index: index + config.time_step, 0:3])
-        train_dataY.append(group_data[index + config.time_step, 3:9])
+        train_dataX.append(group_data[index: index + config.time_step, 0:4])
+        train_dataY.append(group_data[index + config.time_step, 4:5])
 
 train_dataX = np.array(train_dataX)
 train_dataY = np.array(train_dataY)
 
 # 4, 构建data_loader
 x_train = train_dataX.reshape(-1, config.time_step, config.feature_size)
-y_train = train_dataY.reshape(-1, 1, 6)
+y_train = train_dataY.reshape(-1, 1, 1)
 
 x_train_tensor = torch.from_numpy(x_train).to(torch.float32)
 y_train_tensor = torch.from_numpy(y_train).to(torch.float32)
@@ -86,7 +87,8 @@ y_train_tensor = torch.from_numpy(y_train).to(torch.float32)
 train_data = TensorDataset(x_train_tensor, y_train_tensor)
 
 # 处理测试集 不需要标准化
-datafile2 = sio.loadmat('C:/Users/HP/Desktop/CEG5003/dataset/Dataset_nurbs_1/training_set_transformer.mat')
+# datafile2 = sio.loadmat('C:/Users/HP/Desktop/CEG5003/dataset/Dataset_nurbs_1/training_set_transformer.mat')
+datafile2 = sio.loadmat('new_data.mat')
 
 test_dataX = []
 test_dataY = []
@@ -94,13 +96,13 @@ for i in range(13, 16):
     data = datafile2.get(f'series_training{i}')
     # 构建时序数据
     for index in range(len(data) - config.time_step):
-        test_dataX.append(data[index: index + config.time_step, 0: 3])
-        test_dataY.append(data[index + config.time_step][3:9])
+        test_dataX.append(data[index: index + config.time_step, 0:4])
+        test_dataY.append(data[index + config.time_step][4:5])
 test_dataX = np.array(test_dataX)
 test_dataY = np.array(test_dataY)
 
 x_test = test_dataX.reshape(-1, config.time_step, config.feature_size)
-y_test = test_dataY.reshape(-1, 1, 6)
+y_test = test_dataY.reshape(-1, 1, 1)
 
 x_test_tensor = torch.from_numpy(x_test).to(torch.float32)
 y_test_tensor = torch.from_numpy(y_test).to(torch.float32)
@@ -117,8 +119,8 @@ test_loader = torch.utils.data.DataLoader(test_data, config.batch_size, shuffle=
 class GRU(nn.Module):
     def __init__(self, feature_size):
         super(GRU, self).__init__()
-        self.gru1 = nn.GRU(feature_size, 32, batch_first=True, num_layers=1)
-        self.fc = nn.Linear(32, 6)
+        self.gru1 = nn.GRU(feature_size, 256, batch_first=True, num_layers=4)
+        self.fc = nn.Linear(256, 1)
 
     def forward(self, x, hidden=None):
         output, _ = self.gru1(x)
@@ -128,6 +130,7 @@ class GRU(nn.Module):
         # fcOutput = self.fc(fcInput)
         # outcome = fcOutput.reshape(b, s, -1)
         # return outcome[:, -1, :]
+
 
 # # 5.定义GRU网络  两层gru unit分别是200和1（6） 单轴论文
 # class GRU(nn.Module):
@@ -191,8 +194,8 @@ class GRU(nn.Module):
 # 6, 定义model, 损失函数，优化器和学习率
 model = GRU(config.feature_size)  # 定义GRU网络
 loss_function = nn.L1Loss()  # 定义损失函数
-optimizer = torch.optim.Adam(model.parameters(), lr=0.05)  # 定义优化器
-scheduler = StepLR(optimizer, step_size=15, gamma=0.1)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.003)  # 定义优化器
+scheduler = StepLR(optimizer, step_size=12, gamma=0.8)
 
 # 7.模型训练 并且保存效果最优模型
 prev_loss = 1000
@@ -205,7 +208,7 @@ for epoch in range(config.epochs):
         x_train, y_train = data
         optimizer.zero_grad()
         y_train_pred = model(x_train)
-        loss = loss_function(y_train_pred, y_train.reshape(-1, 6))
+        loss = loss_function(y_train_pred, y_train.reshape(-1, 1))
         loss.backward()
         optimizer.step()
         if loss < prev_loss:
@@ -215,7 +218,6 @@ for epoch in range(config.epochs):
     print('epoch:', epoch, 'loss:', running_loss / len(train_loader), "current_lr:", current_lr)
 
 print('Finished Training')
-
 
 # 8. 模型测试
 model.eval()
@@ -233,7 +235,7 @@ with torch.no_grad():  # 关闭梯度计算
 
 # 将预测结果和真实值转换为 NumPy 数组
 predictions = torch.cat(predictions, dim=0).numpy()
-true_values = torch.cat(true_values, dim=0).numpy().reshape(-1, 6)
+true_values = torch.cat(true_values, dim=0).numpy().reshape(-1, 1)
 
 # 初始化一个变量来统计预测正确的数量
 correct_predictions = 0
@@ -242,8 +244,8 @@ correct_predictions = 0
 predictions_l1_norm = []
 true_values_l1_norm = []
 for i in range(len(predictions)):
-    prediction_l1_norm = np.linalg.norm(predictions[i])
-    true_value_l1_norm = np.linalg.norm(true_values[i])
+    prediction_l1_norm = predictions[i]  # np.linalg.norm(predictions[i])
+    true_value_l1_norm = true_values[i]  # np.linalg.norm(true_values[i])
 
     if abs(prediction_l1_norm - true_value_l1_norm) < 0.001:
         correct_predictions += 1
@@ -255,7 +257,6 @@ for i in range(len(predictions)):
 accuracy = correct_predictions / len(predictions)
 print("Test Accuracy:", accuracy)
 
-
 # 9. 绘制预测结果
 plot_size = 100  # 可视化的数据点数量
 plt.figure(figsize=(12, 8))
@@ -263,7 +264,6 @@ plt.plot(predictions_l1_norm[:plot_size], "b", label="Predicted_norm")
 plt.plot(true_values_l1_norm[:plot_size], "r", label="True_norm")
 plt.legend()
 plt.show()
-
 
 # 看一个预测值吧
 print("测试集输入", x_test_tensor[77])
