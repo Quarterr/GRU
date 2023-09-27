@@ -10,7 +10,7 @@ mat_data = sio.loadmat('C:/Users/HP/Desktop/CEG5003/dataset/Dataset_nurbs_1/trai
 new_mat_data = {}
 
 # 2. 对每个2000个一组的数据进行求导，并保存到新的MAT文件
-for i in range(1, 21):
+for i in range(1, 200):
     key = f'series_training{i}'
     data = mat_data[key]
 

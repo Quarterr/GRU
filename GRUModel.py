@@ -13,12 +13,12 @@ class Config:
     batch_size = 300  # 批次大小
     feature_size = 4  # 每个步长对应的特征数量，3个特征值
     output_size = 1  # 输出6维向量。3个位置和对应的导数
-    epochs = 40  # 迭代轮数
+    epochs = 120  # 迭代轮数
     best_loss = 0  # 记录损失
-    learning_rate = 0.0003  # 初始化学习率
+    learning_rate = 0.003  # 初始化学习率
     model_name = 'gru'  # 模型名称
     save_path = './{}.pth'.format(model_name)  # 最优模型保存路径
-
+    loss_result_path = './loss_results.txt'
 
 config = Config()
 
@@ -27,7 +27,7 @@ config = Config()
 datafile = sio.loadmat('new_data.mat')
 
 train_set = None
-for i in range(1, 11):
+for i in range(1, 141):
     data = datafile.get(f'series_training{i}')
     if train_set is None:
         train_set = data
@@ -92,7 +92,7 @@ datafile2 = sio.loadmat('new_data.mat')
 
 test_dataX = []
 test_dataY = []
-for i in range(13, 16):
+for i in range(150, 186):
     data = datafile2.get(f'series_training{i}')
     # 构建时序数据
     for index in range(len(data) - config.time_step):
@@ -111,7 +111,7 @@ test_data = TensorDataset(x_test_tensor, y_test_tensor)
 
 # 将数据加载成迭代器
 train_loader = torch.utils.data.DataLoader(train_data, config.batch_size, shuffle=True)
-test_loader = torch.utils.data.DataLoader(test_data, config.batch_size, shuffle=True)
+test_loader = torch.utils.data.DataLoader(test_data, config.batch_size, shuffle=False)
 
 
 # 5.定义GRU网络  两层gru unit分别是200和1（6） 单轴论文 --修改第二层为全连接层 200-6
@@ -191,14 +191,16 @@ class GRU(nn.Module):
 #         return output
 
 
-# 6, 定义model, 损失函数，优化器和学习率
+#6, 定义model, 损失函数，优化器和学习率
 model = GRU(config.feature_size)  # 定义GRU网络
 loss_function = nn.L1Loss()  # 定义损失函数
 optimizer = torch.optim.Adam(model.parameters(), lr=0.003)  # 定义优化器
-scheduler = StepLR(optimizer, step_size=12, gamma=0.8)
+scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
 
 # 7.模型训练 并且保存效果最优模型
 prev_loss = 1000
+loss_result_file = open(config.loss_result_path, "w")  # Open a file to store the loss results
+
 for epoch in range(config.epochs):
     # 动态调整学习率
     scheduler.step()
@@ -212,13 +214,13 @@ for epoch in range(config.epochs):
         loss.backward()
         optimizer.step()
         if loss < prev_loss:
-            torch.save(config.save_path, 'gru_model.pt')  # save model parameters to files
+            torch.save(model, 'gru_model.pt')  # save model parameters to files
             prev_loss = loss
         running_loss += loss.item()
     print('epoch:', epoch, 'loss:', running_loss / len(train_loader), "current_lr:", current_lr)
+    loss_result_file.write(f"Epoch {epoch}: Loss {running_loss / len(train_loader)} current_lr: {current_lr}\n")
 
 print('Finished Training')
-
 # 8. 模型测试
 model.eval()
 
@@ -247,7 +249,7 @@ for i in range(len(predictions)):
     prediction_l1_norm = predictions[i]  # np.linalg.norm(predictions[i])
     true_value_l1_norm = true_values[i]  # np.linalg.norm(true_values[i])
 
-    if abs(prediction_l1_norm - true_value_l1_norm) < 0.001:
+    if abs(prediction_l1_norm - true_value_l1_norm) < 0.000001:
         correct_predictions += 1
 
     predictions_l1_norm.append(prediction_l1_norm)
@@ -256,6 +258,22 @@ for i in range(len(predictions)):
 # 计算准确率
 accuracy = correct_predictions / len(predictions)
 print("Test Accuracy:", accuracy)
+loss_result_file.write(f"Test Accuracy: {accuracy}")
+
+loss_result_file.close()
+
+
+# 保存到mat
+data_to_save = {
+    'predictions': predictions[:2000],
+    'true_values': true_values[:2000]
+}
+
+# Define the filename for the .mat file
+output_filename = 'predictions_and_true_values.mat'
+
+# Save the dictionary containing predictions and true values in the .mat file
+sio.savemat(output_filename, data_to_save)
 
 # 9. 绘制预测结果
 plot_size = 100  # 可视化的数据点数量
